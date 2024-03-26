@@ -166,7 +166,7 @@ class RAG:
 
         # configure response synthesizer
 
-        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_mode=response_mode, prompt_template=self.query_wrapper_prompt)
+        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_mode=response_mode, text_qa_template=self.query_wrapper_prompt)
         response = query_engine.query(query.query + append_query)
         response_object = Response(
             search_result=str(response).strip(), 
