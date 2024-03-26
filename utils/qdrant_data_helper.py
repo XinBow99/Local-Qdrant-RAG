@@ -3,7 +3,7 @@ import qdrant_client
 from .format import Query, Response
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
-from llama_index.core import SimpleDirectoryReader, StorageContext, ServiceContext, VectorStoreIndex, get_response_synthesizer, PromptHelper
+from llama_index.core import SimpleDirectoryReader, StorageContext, ServiceContext, VectorStoreIndex, get_response_synthesizer
 from llama_index.llms.ollama import Ollama
 from llama_index.core import PromptTemplate
 
@@ -165,14 +165,8 @@ class RAG:
         assert query is not None and isinstance(query, Query), "Query must be provided and be of type Query."
 
         # configure response synthesizer
-        response_synthesizer = get_response_synthesizer(
-            llm=self.llm,
-            response_mode=response_mode,
-            text_qa_template=self.query_wrapper_prompt,
-            summary_template=self.query_wrapper_prompt,
-        )
 
-        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_synthesizer=response_synthesizer, verbose=True)
+        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_mode=response_mode, prompt_template=self.query_wrapper_prompt)
         response = query_engine.query(query.query + append_query)
         response_object = Response(
             search_result=str(response).strip(), 
