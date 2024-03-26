@@ -1,129 +1,141 @@
-    
-from pydantic import BaseModel, Field
-from typing import Any, Optional, List
-from llama_index.core import (
-    ServiceContext,
-    SimpleDirectoryReader,
-    StorageContext,
-    VectorStoreIndex,
-)
-# from llama_index.vector_stores.qdrant import QdrantVectorStore
-# pip install llama-index-vector-stores-qdrant llama-index-readers-file llama-index-embeddings-fastembed llama-index-llms-openai
-from llama_index.vector_stores.qdrant import QdrantVectorStore
+from typing import List, Optional
 import qdrant_client
+from .format import Query, Response
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-
+from llama_index.vector_stores.qdrant import QdrantVectorStore
+from llama_index.core import SimpleDirectoryReader, StorageContext, ServiceContext, VectorStoreIndex
 from llama_index.llms.ollama import Ollama
-
-
-class Query(BaseModel):
-    """
-    主要用於接收使用者的查詢
-    :param query: 使用者的查詢
-    :param similarity_top_k: 查詢的相似度前幾名
-    """
-    query: str
-    similarity_top_k: Optional[int] = Field(default=1, ge=1, le=5)
-
-class Response(BaseModel):
-    """
-    主要用於回傳給使用者的回應
-    :param search_result: 搜尋結果
-    :param source: 搜尋結果的來源
-    """
-    search_result: str 
-    source: str
-
-
 class DataIngestor:
-    def __init__(self, embedder_name="sentence-transformers/all-mpnet-base-v2", collection_name="test_collection", q_client_url="http://localhost:6333/", q_api_key=None, data_path="./data"):
+    """Utility for ingesting a dataset into Qdrant.
+
+    Attributes:
+        embedder: An embedding model for generating vector representations of documents.
+        collection_name: The name of the collection in Qdrant.
+        client: The Qdrant client for communicating with the Qdrant service.
+        data_path: The local storage path of the dataset.
+    """
+    def __init__(self, embedder_name: str = "sentence-transformers/all-mpnet-base-v2", collection_name: str = "test_collection", q_client_url: str = "http://localhost:6333/", q_api_key: Optional[str] = None, data_path: str = "./data"):
         """
-        :param embedder_name: 嵌入模型的名稱
-        :param collection_name: 資料集名稱
-        :param q_client_url: Qdrant client 的 URL
-        :param q_api_key: Qdrant client 的 API key
-        :param data_path: 資料集的路徑(folder path)
+        Initializes an instance of DataIngestor.
+
+        Args:
+            embedder_name: The name of the embedding model.
+            collection_name: The name of the dataset collection.
+            q_client_url: The URL for the Qdrant client.
+            q_api_key: The API key for the Qdrant client.
+            data_path: The path (folder path) of the dataset.
         """
         self.embedder = HuggingFaceEmbedding(model_name=embedder_name)
         self.collection_name = collection_name
-        if q_api_key is None:
-            self.client = qdrant_client.QdrantClient(url=q_client_url)
-        else:
-            self.client = qdrant_client.QdrantClient(url=q_client_url, api_key=q_api_key)
+        self.client = qdrant_client.QdrantClient(url=q_client_url, api_key=q_api_key) if q_api_key else qdrant_client.QdrantClient(url=q_client_url)
         self.data_path = data_path
 
-    def load_data(self):
+    def load_data(self) -> List[dict]:
+        """Loads data from the specified data path.
+
+        Returns:
+            A list of dictionaries containing the data.
+        """
         return SimpleDirectoryReader(self.data_path).load_data()
 
-    def create_storage_context(self):
+    def create_storage_context(self) -> StorageContext:
+        """Creates and configures a storage context.
+
+        Returns:
+            The configured storage context.
+        """
         qdrant_vector_store = QdrantVectorStore(client=self.client, collection_name=self.collection_name)
         return StorageContext.from_defaults(vector_store=qdrant_vector_store)
 
-    def create_service_context(self):
-        return ServiceContext.from_defaults(llm=None,embed_model=self.embedder, chunk_size=1024)
+    def create_service_context(self) -> ServiceContext:
+        """Creates and configures a service context.
+
+        Returns:
+            The configured service context.
+        """
+        return ServiceContext.from_defaults(llm=None, embed_model=self.embedder, chunk_size=1024)
 
     def ingest(self):
-        """
-        用於將資料集載入 Qdrant 中
-        """
+        """Ingests the dataset into Qdrant."""
         documents = self.load_data()
         storage_context = self.create_storage_context()
         service_context = self.create_service_context()
 
         index = VectorStoreIndex.from_documents(documents, storage_context=storage_context, service_context=service_context)
         return index
-    
+
+   
 class RAG:
-    def __init__(self,embedder_name="sentence-transformers/all-mpnet-base-v2", q_client_url="http://localhost:6333/", q_api_key="None", ollama_model="gemma:7b", ollama_base_url="http://localhost:11434"):
-        """
-        主要是用於建立 RAG 模型
-        :param llm: ollama llm
-        """
+    """A class for constructing a Retrieval-Augmented Generation (RAG) model.
 
-    
-        if q_api_key is None:
-            self.client = qdrant_client.QdrantClient(url=q_client_url)
-        else:
-            self.client = qdrant_client.QdrantClient(url=q_client_url, api_key=q_api_key)
+    This class is responsible for setting up the components needed for a RAG model, including the embedding model, Qdrant client, and the Ollama language model.
 
-        llm = Ollama(model=ollama_model)
-        llm.base_url = ollama_base_url
-        self.llm = llm  # ollama llm
+    Attributes:
+        embedder_name: The name of the embedding model.
+        q_client_url: The URL for the Qdrant client.
+        q_api_key: The API key for the Qdrant client (optional).
+        ollama_model: The name of the Ollama model.
+        ollama_base_url: The base URL for the Ollama model.
+        client: The Qdrant client.
+        llm: The Ollama language model.
+        embed_model: The loaded embedding model.
+    """
+    def __init__(self, embedder_name: str = "sentence-transformers/all-mpnet-base-v2", q_client_url: str = "http://localhost:6333/", q_api_key: Optional[str] = None, ollama_model: str = "gemma:7b", ollama_base_url: str = "http://localhost:11434"):
+        """
+        Initializes the RAG model with the necessary components.
+
+        Args:
+            embedder_name: The name of the embedding model to use.
+            q_client_url: The URL to connect to the Qdrant service.
+            q_api_key: An optional API key for authenticated access to Qdrant.
+            ollama_model: The name of the Ollama model to use for generation.
+            ollama_base_url: The base URL for accessing the Ollama service.
+        """
+        self.client = qdrant_client.QdrantClient(url=q_client_url, api_key=q_api_key) if q_api_key else qdrant_client.QdrantClient(url=q_client_url)
+        self.llm = Ollama(model=ollama_model, base_url=ollama_base_url)
         self.embedder_name = embedder_name
-        self.embed_model = self.load_embedder()  # 加載嵌入模型
+        self.embed_model = self.load_embedder()
 
-    def load_embedder(self):
+    def load_embedder(self) -> HuggingFaceEmbedding:
+        """Loads the embedding model.
+
+        Returns:
+            The loaded HuggingFaceEmbedding model.
+        """
         return HuggingFaceEmbedding(model_name=self.embedder_name)
 
-    def qdrant_index(self, collection_name="dcard_collection", chunk_size=1024):
-        """
-        用於建立 Qdrant 的索引
-        :param collection_name: 資料集名稱
-        :param chunk_size: chunk size
+    def qdrant_index(self, collection_name: str = "dcard_collection", chunk_size: int = 1024) -> VectorStoreIndex:
+        """Creates an index in Qdrant for the specified collection.
+
+        Args:
+            collection_name: The name of the collection to index.
+            chunk_size: The size of chunks for processing documents.
+
+        Returns:
+            The VectorStoreIndex object for the specified collection.
         """
         qdrant_vector_store = QdrantVectorStore(client=self.client, collection_name=collection_name)
         service_context = ServiceContext.from_defaults(llm=self.llm, embed_model=self.embed_model, chunk_size=chunk_size)
+        return VectorStoreIndex.from_vector_store(vector_store=qdrant_vector_store, service_context=service_context)
 
-        index = VectorStoreIndex.from_vector_store(vector_store=qdrant_vector_store, service_context=service_context)
-        return index
+    def get_response(self, index: VectorStoreIndex, query: 'Query', append_query: str = "") -> 'Response':
+        """Executes a query using the RAG model.
 
-    def __get__response__(self, 
-                          index: VectorStoreIndex, 
-                          query: Query
-                          , append_query: str = ""
-                          ) -> Response:
+        Args:
+            index: The VectorStoreIndex to use for querying.
+            query: The Query object containing the user's query.
+            append_query: Additional text to append to the query (optional).
+
+        Returns:
+            A Response object containing the search result and source.
+
+        Raises:
+            AssertionError: If any of the inputs are not of the expected type.
         """
-        主要是用於查詢
-        :param __index: 索引
-        :param __query: 查詢
-        :param __append_query: 附加查詢 一些中文字 或 英文字
-        """
-        assert index is not None, "Index is required"
-        assert query is not None, "Query is required"
-        assert type(query) == Query, "Query must be of type Query"
-        assert type(index) == VectorStoreIndex, "Index must be of type VectorStoreIndex"
+        assert index is not None and isinstance(index, VectorStoreIndex), "Index must be provided and be of type VectorStoreIndex."
+        assert query is not None and isinstance(query, Query), "Query must be provided and be of type Query."
 
-        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output=Response, response_mode="tree_summarize", verbose=True)
+        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_mode="tree_summarize", verbose=True)
         response = query_engine.query(query.query + append_query)
         response_object = Response(
             search_result=str(response).strip(), 

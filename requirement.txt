@@ -1,0 +1,8 @@
+llama-index
+llama-index-llms-ollama
+llama-index-embeddings-huggingface
+llama-index-vector-stores-qdrant
+InstructorEmbedding
+torch
+transformers
+sentence-transformers==2.2.2

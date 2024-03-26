@@ -17,12 +17,13 @@ def main():
                      collection_name="dcard_collection", 
                      chunk_size=1024
                      )
+
     query = Query(
-            query="高科大在哪裡？",
+            query="高科大是什麼時候合併的？",
             top_k=5
     )
 
-    result = rag.__get__response__(
+    result = rag.get_response(
                     index= search_index,
                     query= query,
                     append_query=""
