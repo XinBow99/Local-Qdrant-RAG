@@ -5,6 +5,10 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from llama_index.core import SimpleDirectoryReader, StorageContext, ServiceContext, VectorStoreIndex
 from llama_index.llms.ollama import Ollama
+
+# Local settings
+from llama_index.core.node_parser import SentenceSplitter
+
 class DataIngestor:
     """Utility for ingesting a dataset into Qdrant.
 
@@ -14,7 +18,7 @@ class DataIngestor:
         client: The Qdrant client for communicating with the Qdrant service.
         data_path: The local storage path of the dataset.
     """
-    def __init__(self, embedder_name: str = "sentence-transformers/all-mpnet-base-v2", collection_name: str = "test_collection", q_client_url: str = "http://localhost:6333/", q_api_key: Optional[str] = None, data_path: str = "./data"):
+    def __init__(self, embedder_name: str = "sentence-transformers/all-mpnet-base-v2", collection_name: str = "test_collection", q_client_url: str = "http://localhost:6333/", q_api_key: Optional[str] = None, data_path: str = "./data", chunk_size: int = 1024):
         """
         Initializes an instance of DataIngestor.
 
@@ -25,10 +29,11 @@ class DataIngestor:
             q_api_key: The API key for the Qdrant client.
             data_path: The path (folder path) of the dataset.
         """
-        self.embedder = HuggingFaceEmbedding(model_name=embedder_name)
+        self.embedder = HuggingFaceEmbedding(model_name=embedder_name,max_length=512)
         self.collection_name = collection_name
         self.client = qdrant_client.QdrantClient(url=q_client_url, api_key=q_api_key) if q_api_key else qdrant_client.QdrantClient(url=q_client_url)
         self.data_path = data_path
+        self.chunk_size = chunk_size
 
     def load_data(self) -> List[dict]:
         """Loads data from the specified data path.
@@ -53,15 +58,21 @@ class DataIngestor:
         Returns:
             The configured service context.
         """
-        return ServiceContext.from_defaults(llm=None, embed_model=self.embedder, chunk_size=1024)
+        return ServiceContext.from_defaults(llm=None, embed_model=self.embedder, chunk_size=self.chunk_size)
 
     def ingest(self):
+        
         """Ingests the dataset into Qdrant."""
         documents = self.load_data()
         storage_context = self.create_storage_context()
         service_context = self.create_service_context()
 
-        index = VectorStoreIndex.from_documents(documents, storage_context=storage_context, service_context=service_context)
+        index = VectorStoreIndex.from_documents(
+            documents, 
+            storage_context=storage_context, 
+            service_context=service_context,
+            transformations=[SentenceSplitter(chunk_size=self.chunk_size, separator=",")]
+        )
         return index
 
    
