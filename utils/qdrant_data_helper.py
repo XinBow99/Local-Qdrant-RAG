@@ -64,7 +64,7 @@ class DataIngestor:
         Returns:
             The configured service context.
         """
-        return ServiceContext.from_defaults(llm=None, embed_model=self.embedder, chunk_size=self.chunk_size)
+        return ServiceContext.from_defaults(llm=Ollama(base_url="http://163.18.22.32/ollama", model="gemma:7b"), embed_model=self.embedder, chunk_size=self.chunk_size)
 
     def ingest(self):
         

@@ -5,22 +5,12 @@ Thie is inference code for the RAG and Qdrant with Ollama
 from utils.qdrant_data_helper import RAG, Query
 
 def main():
-    QA_Prompt_summarization_Prompt = """
-        You are an AI assistant that answers questions in a friendly manner, based on the given source documents. Here are some rules you always follow:
-        - Generate human readable output, avoid creating output with gibberish text.
-        - Generate only the requested output, don't include any other language before or after the requested output.
-        - Never say thank you, that you are happy to help, that you are an AI agent, etc. Just answer directly.
-        - Generate professional l
-        4532anguage typically used in business documents in North America.
-        - Never generate offensive or foul language.
-        """
     host = "localhost"
     rag = RAG(
         q_client_url=f"http://{host}:6333/", 
         q_api_key="test", # you can change this to your own qdrant api key if you have set it, otherwise, using None
         ollama_model="gemma:7b", 
         ollama_base_url=f"http://{host}:11434",
-        SYSTEM_PROMPT=QA_Prompt_summarization_Prompt
         )
     
     search_index = rag.qdrant_index(
@@ -37,7 +27,7 @@ def main():
                     index= search_index,
                     query= query,
                     append_query="",
-                    response_mode="tree_summarize"
+                    response_mode="refine"
                 )
 
     print("Result: ", result.search_result)
