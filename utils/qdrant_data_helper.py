@@ -77,7 +77,9 @@ class DataIngestor:
             documents, 
             storage_context=storage_context, 
             service_context=service_context,
-            transformations=[SentenceSplitter(chunk_size=self.chunk_size, separator=",")]
+            transformations=[
+                SentenceSplitter(chunk_size=chunk_size, chunk_overlap=10),
+            ]
         )
         return index
 
