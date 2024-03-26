@@ -15,7 +15,7 @@ def main():
     
     search_index = rag.qdrant_index(
                      collection_name="dcard_collection", 
-                     chunk_size=100
+                     chunk_size=1024
                      )
 
     query = Query(
