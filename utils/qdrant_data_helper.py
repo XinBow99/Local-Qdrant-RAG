@@ -3,8 +3,9 @@ import qdrant_client
 from .format import Query, Response
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
-from llama_index.core import SimpleDirectoryReader, StorageContext, ServiceContext, VectorStoreIndex
+from llama_index.core import SimpleDirectoryReader, StorageContext, ServiceContext, VectorStoreIndex, get_response_synthesizer, PromptHelper
 from llama_index.llms.ollama import Ollama
+from llama_index.core import PromptTemplate
 
 # Local settings
 from llama_index.core.node_parser import SentenceSplitter
@@ -91,7 +92,7 @@ class RAG:
         llm: The Ollama language model.
         embed_model: The loaded embedding model.
     """
-    def __init__(self, embedder_name: str = "sentence-transformers/all-mpnet-base-v2", q_client_url: str = "http://localhost:6333/", q_api_key: Optional[str] = None, ollama_model: str = "gemma:7b", ollama_base_url: str = "http://localhost:11434"):
+    def __init__(self, embedder_name: str = "sentence-transformers/all-mpnet-base-v2", q_client_url: str = "http://localhost:6333/", q_api_key: Optional[str] = None, ollama_model: str = "gemma:7b", ollama_base_url: str = "http://localhost:11434", SYSTEM_PROMPT: str = None):
         """
         Initializes the RAG model with the necessary components.
 
@@ -101,12 +102,29 @@ class RAG:
             q_api_key: An optional API key for authenticated access to Qdrant.
             ollama_model: The name of the Ollama model to use for generation.
             ollama_base_url: The base URL for accessing the Ollama service.
+            SYSTEM_PROMPT: The system prompt to use for the RAG model (optional).
         """
+        SYSTEM_PROMPT = """
+        You are an AI assistant that answers questions in a friendly manner, based on the given source documents. Here are some rules you always follow:
+        - Generate human readable output, avoid creating output with gibberish text.
+        - Generate only the requested output, don't include any other language before or after the requested output.
+        - Never say thank you, that you are happy to help, that you are an AI agent, etc. Just answer directly.
+        - Generate professional language typically used in business documents in North America.
+        - Never generate offensive or foul language.
+        """ if SYSTEM_PROMPT is None else SYSTEM_PROMPT
+
+        self.query_wrapper_prompt = PromptTemplate(
+            "[INST]<<SYS>>\n" + SYSTEM_PROMPT + "<</SYS>>\n\n{query_str}[/INST] "
+        )
+
         self.client = qdrant_client.QdrantClient(url=q_client_url, api_key=q_api_key) if q_api_key else qdrant_client.QdrantClient(url=q_client_url)
-        self.llm = Ollama(model=ollama_model, base_url=ollama_base_url)
+        self.llm = Ollama(
+            model=ollama_model, 
+            base_url=ollama_base_url,
+        )
         self.embedder_name = embedder_name
         self.embed_model = self.load_embedder()
-
+        
     def load_embedder(self) -> HuggingFaceEmbedding:
         """Loads the embedding model.
 
@@ -129,7 +147,7 @@ class RAG:
         service_context = ServiceContext.from_defaults(llm=self.llm, embed_model=self.embed_model, chunk_size=chunk_size)
         return VectorStoreIndex.from_vector_store(vector_store=qdrant_vector_store, service_context=service_context)
 
-    def get_response(self, index: VectorStoreIndex, query: 'Query', append_query: str = "") -> 'Response':
+    def get_response(self, index: VectorStoreIndex, query: 'Query', append_query: str = "", response_mode:str ="tree_summarize") -> 'Response':
         """Executes a query using the RAG model.
 
         Args:
@@ -146,7 +164,15 @@ class RAG:
         assert index is not None and isinstance(index, VectorStoreIndex), "Index must be provided and be of type VectorStoreIndex."
         assert query is not None and isinstance(query, Query), "Query must be provided and be of type Query."
 
-        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_mode="tree_summarize", verbose=True)
+        # configure response synthesizer
+        response_synthesizer = get_response_synthesizer(
+            llm=self.llm,
+            response_mode=response_mode,
+            text_qa_template=self.query_wrapper_prompt,
+            summary_template=self.query_wrapper_prompt,
+        )
+
+        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_synthesizer=response_synthesizer, verbose=True)
         response = query_engine.query(query.query + append_query)
         response_object = Response(
             search_result=str(response).strip(), 
