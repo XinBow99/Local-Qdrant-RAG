@@ -3,7 +3,12 @@ import qdrant_client
 from .format import Query, Response
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
-from llama_index.core import SimpleDirectoryReader, StorageContext, ServiceContext, VectorStoreIndex, get_response_synthesizer
+from llama_index.core import (
+    SimpleDirectoryReader, 
+    StorageContext, 
+    ServiceContext, 
+    VectorStoreIndex,
+    )
 from llama_index.llms.ollama import Ollama
 from llama_index.core import PromptTemplate
 
@@ -166,7 +171,7 @@ class RAG:
 
         # configure response synthesizer
 
-        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_mode=response_mode, text_qa_template=self.query_wrapper_prompt)
+        query_engine = index.as_query_engine(similarity_top_k=query.similarity_top_k, output='Response', response_mode=response_mode)
         response = query_engine.query(query.query + append_query)
         response_object = Response(
             search_result=str(response).strip(), 
