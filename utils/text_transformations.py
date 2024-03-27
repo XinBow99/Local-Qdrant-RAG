@@ -27,6 +27,7 @@ def get_transform_pipeline(chunk_size: int=512, HFE_model_name: str="sentence-tr
         chunk_size: The size of the text chunks.
         HFE_model_name: The name of the Hugging Face embedding model.
     """
+    # https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/transformations/
     transformations = [
         #TokenTextSplitter(chunk_size=chunk_size, chunk_overlap=128),
         #TitleExtractor(),
