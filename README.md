@@ -141,3 +141,7 @@ Before you begin, ensure you have the following installed:
 - [Docker](https://www.docker.com/)
 - [Hugging Face](https://huggingface.co/)
 
+## To-Do
+
+- [ ] Add support for other vector databases
+- [ ] Optimize Metadata Filtering
