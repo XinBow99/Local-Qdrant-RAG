@@ -1,19 +1,23 @@
 from typing import List, Optional
 import qdrant_client
+
 from .format import Query, Response
+from .text_transformations import get_transform_pipeline
+
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
+
 from llama_index.core import (
     SimpleDirectoryReader, 
     StorageContext, 
     ServiceContext, 
     VectorStoreIndex,
+    PromptTemplate
     )
-from llama_index.llms.ollama import Ollama
-from llama_index.core import PromptTemplate
 
-# Local settings
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.llms.ollama import Ollama
+# global
+from llama_index.core import Settings
 
 class DataIngestor:
     """Utility for ingesting a dataset into Qdrant.
@@ -35,7 +39,9 @@ class DataIngestor:
             q_api_key: The API key for the Qdrant client.
             data_path: The path (folder path) of the dataset.
         """
+        Settings.llm = None
         self.embedder = HuggingFaceEmbedding(model_name=embedder_name,max_length=512)
+
         self.collection_name = collection_name
         self.client = qdrant_client.QdrantClient(url=q_client_url, api_key=q_api_key) if q_api_key else qdrant_client.QdrantClient(url=q_client_url)
         self.data_path = data_path
@@ -57,14 +63,14 @@ class DataIngestor:
         """
         qdrant_vector_store = QdrantVectorStore(client=self.client, collection_name=self.collection_name)
         return StorageContext.from_defaults(vector_store=qdrant_vector_store)
-
+    
     def create_service_context(self) -> ServiceContext:
         """Creates and configures a service context.
 
         Returns:
             The configured service context.
         """
-        return ServiceContext.from_defaults(llm=Ollama(base_url="http://163.18.22.32/ollama", model="gemma:7b"), embed_model=self.embedder, chunk_size=self.chunk_size)
+        return ServiceContext.from_defaults(llm=None, embed_model=self.embedder, chunk_size=self.chunk_size)
 
     def ingest(self):
         
@@ -75,11 +81,9 @@ class DataIngestor:
 
         index = VectorStoreIndex.from_documents(
             documents, 
-            storage_context=storage_context, 
+            storage_context=storage_context,
             service_context=service_context,
-            transformations=[
-                SentenceSplitter(chunk_size=chunk_size, chunk_overlap=10),
-            ]
+            transformations=get_transform_pipeline(chunk_size=self.chunk_size)
         )
         return index
 
